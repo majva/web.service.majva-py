@@ -1,0 +1,37 @@
+# Application Configuration
+app:
+  name: "Majva python template"
+  version: "1.0.0.0"
+  description: "Majva python template"
+  environment: "development"
+
+# Server Configuration
+server:
+  host: "0.0.0.0"
+  port: 5000
+  debug: false
+
+# Database Configuration
+database:
+  url: "postgresql://postgres:postgres@localhost:5432/postgres"
+
+# API Configuration
+api:
+  prefix: "/api/v1"
+  cors:
+    allow_origins: ["*"]
+    allow_credentials: true
+    allow_methods: ["*"]
+    allow_headers: ["*"]
+
+vaulthc:
+  # Set to false for local/dev — secrets are read from environment variables instead.
+  enabled: false
+  KV_VERSION: "1"
+  VAULT_HOST: "https://vault.example.com"
+  KV_NAMESPACE: "secret"
+
+# Health Check Configuration
+health_check:
+  enabled: true
+  timeout: 30

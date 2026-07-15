@@ -1,0 +1,157 @@
+stages:
+  - validate
+  - migrate
+  - build
+
+variables:
+  GIT_SSL_NO_VERIFY: "1"
+  DOCKER_DRIVER: overlay
+  DOCKER_TLS_CERTDIR: "/certs"
+  DOCKER_BUILDKIT: "1"
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  PYTHON_IMAGE: "python:3.11.9"
+  REGISTRY_HOST: "registry.majva.com"
+  IMAGE_REPOSITORY: "majva/python-template"
+
+# ---------------------------------------------------------------------------
+# Shared templates
+# ---------------------------------------------------------------------------
+
+.prod_changes:
+  changes:
+    - src/**/*
+    - requirements.txt
+    - Dockerfile
+    - .dockerignore
+    - .gitlab-ci.yml
+    - ci/**/*
+
+.prod_rules:
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes: !reference [.prod_changes, changes]
+    - when: never
+
+.mr_rules:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - when: never
+
+.python_job:
+  image: $PYTHON_IMAGE
+  interruptible: true
+  retry:
+    max: 1
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
+  cache:
+    key:
+      files:
+        - requirements.txt
+    paths:
+      - .cache/pip
+    policy: pull-push
+  before_script:
+    - python --version
+    - pip install --upgrade pip
+    - pip install -r requirements.txt
+
+.docker_job:
+  image: docker:24-cli
+  services:
+    - name: docker:24-dind
+      alias: docker
+  interruptible: true
+  retry:
+    max: 1
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
+  variables:
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_VERIFY: "1"
+    DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
+  before_script:
+    - docker info
+    - echo "$CI_NEXUS_PROD_ADMIN_PASSWORD" | docker login "https://$REGISTRY_HOST" -u "$CI_NEXUS_PROD_ADMIN_USERNAME" --password-stdin
+
+# ---------------------------------------------------------------------------
+# Validate (runs on MRs and production changes)
+# ---------------------------------------------------------------------------
+
+validate::mr:
+  extends:
+    - .python_job
+    - .mr_rules
+  stage: validate
+  tags:
+    - prod
+  script:
+    - python -m compileall -q src
+    - |
+      if find src -type f -name 'test_*.py' | grep -q .; then
+        pytest
+      else
+        echo "No tests found. Skipping pytest."
+      fi
+
+validate::prod:
+  extends:
+    - .python_job
+    - .prod_rules
+  stage: validate
+  tags:
+    - prod
+  script:
+    - python -m compileall -q src
+    - |
+      if find src -type f -name 'test_*.py' | grep -q .; then
+        pytest
+      else
+        echo "No tests found. Skipping pytest."
+      fi
+
+# ---------------------------------------------------------------------------
+# Migrate (production only, after validation)
+# ---------------------------------------------------------------------------
+
+migrate::prod:
+  extends:
+    - .python_job
+    - .prod_rules
+  stage: migrate
+  tags:
+    - prod
+  needs:
+    - job: validate::prod
+  script:
+    - |
+      if [ -z "$POSTGRES_CONNECTION_STRING" ] && [ "${ENVIRONMENT:-development}" = "development" ]; then
+        echo "ERROR: POSTGRES_CONNECTION_STRING is required for database migrations."
+        echo "Add it in GitLab CI/CD variables for this project."
+        exit 1
+      fi
+    - python src/infrastructure/scripts/run_migrations.py --upgrade
+
+# ---------------------------------------------------------------------------
+# Build & push image (production only, after migration)
+# ---------------------------------------------------------------------------
+
+build::prod:
+  extends:
+    - .docker_job
+    - .prod_rules
+  stage: build
+  tags:
+    - prod
+  needs:
+    - job: migrate::prod
+  script:
+    - export IMAGE_SHA="${REGISTRY_HOST}/${IMAGE_REPOSITORY}:${CI_COMMIT_SHORT_SHA}"
+    - export IMAGE_LATEST="${REGISTRY_HOST}/${IMAGE_REPOSITORY}:latest"
+    - docker build --pull --tag "$IMAGE_SHA" --tag "$IMAGE_LATEST" .
+    - docker push "$IMAGE_SHA"
+    - docker push "$IMAGE_LATEST"
+    - echo "Pushed $IMAGE_SHA"
+    - echo "Pushed $IMAGE_LATEST"

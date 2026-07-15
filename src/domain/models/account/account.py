@@ -1,5 +1,5 @@
 from sqlalchemy import Column, Integer, String, DateTime, Boolean
-from src.infrastructure.context.dbcontext import Base
+from src.infrastructure.context.sql_db.psql_dbcontext import Base
 from sqlalchemy.sql import func
 from datetime import datetime, UTC
 from uuid import uuid4

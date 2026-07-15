@@ -13,6 +13,7 @@ import requests
 sys_path.append(os_path.dirname(os_path.dirname(os_path.dirname(os_path.abspath(__file__)))))
 
 from src.host.host_collection import WebHostCollection
+from src.infrastructure.di.bootstrap import bootstrap_di
 
 # Suppress the warnings from urllib3
 requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
@@ -24,6 +25,7 @@ class App:
         pass
 
     def start_up(self):
+        bootstrap_di()
         WebHostCollection.main()
 
 

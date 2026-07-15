@@ -2,11 +2,15 @@ import yaml
 from pathlib import Path
 from typing import Dict, Any
 
+from src.infrastructure.di import inject
 
+
+@inject
 class ConfigReader:
     """
     Configuration reader for loading and managing application settings from config.yaml
     """
+    __di_singleton__ = True
     
     _instance = None
     _config = None
@@ -53,6 +57,12 @@ class ConfigReader:
                     "allow_methods": ["*"],
                     "allow_headers": ["*"]
                 }
+            },
+            "vaulthc": {
+                "enabled": False,
+                "KV_VERSION": "1",
+                "VAULT_HOST": "",
+                "KV_NAMESPACE": "secret",
             },
             "health_check": {
                 "enabled": True,
@@ -113,6 +123,10 @@ class ConfigReader:
     def get_health_check_config(self) -> Dict[str, Any]:
         """Get health check configuration"""
         return self.get('health_check', {})
+
+    def is_vault_enabled(self) -> bool:
+        """Whether Vault should be used for secrets (false = use env vars)."""
+        return bool(self.get('vaulthc.enabled', False))
     
     def reload(self):
         """Reload configuration from file"""

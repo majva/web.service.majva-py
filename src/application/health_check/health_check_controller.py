@@ -2,13 +2,16 @@ from fastapi import APIRouter, status
 from datetime import datetime
 from typing import Dict
 
+from src.infrastructure.di import inject
+
 from .dtos.health_check_dto import HealthCheckResponse 
 
 
+@inject
 class HealthCheckController:
 
     def __init__(self):
-        super(HealthCheckController, self).__init__()
+        pass
 
     def api(self):
         router = APIRouter(

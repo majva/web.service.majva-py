@@ -1,11 +1,9 @@
-from dependency_injector.containers import DeclarativeContainer 
-from dependency_injector.providers import Factory, Singleton
+from __future__ import annotations
 
-from .context.sql_db.psql_dbcontext import PsqlDbContext
-from .context.vault.vault_service import VaultService
+from dependency_injector.containers import DeclarativeContainer
 
-class InfrastructureCollection(DeclarativeContainer):
+from src.infrastructure.di.reflection import ReflectiveCollection
 
-    vault_service = Singleton(VaultService)
 
-    psql_db_context = Singleton(PsqlDbContext, vault_service=vault_service)
+class InfrastructureCollection(DeclarativeContainer, ReflectiveCollection):
+    """Auto-discovers every @inject class under src.infrastructure."""

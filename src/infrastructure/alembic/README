@@ -1,16 +1,18 @@
 Generic single-database configuration.
 
+Environment:
+    POSTGRES_CONNECTION_STRING  Database connection string (required for migrate/upgrade)
 
-commands:
+Commands:
 
-for init 
-    python -m alembic init alembic
+    # Apply all pending migrations (used by CI/CD and Docker entrypoint)
+    python src/infrastructure/scripts/run_migrations.py --upgrade
 
-Create & apply migrations:
+    # Generate a migration from model changes, then apply it (local development)
+    python src/infrastructure/scripts/run_migrations.py --sync -m "describe your change"
 
-    python -m alembic revision --autogenerate -m "init_db"
-    python -m alembic upgrade head
+    # Generate only (without applying)
+    python src/infrastructure/scripts/run_migrations.py --autogenerate -m "describe your change"
 
-roll back to last migrations
-    python -m alembic downgrade -1
-    python -m alembic upgrade head
+    # Roll back one revision
+    cd src/infrastructure && python -m alembic downgrade -1

@@ -1,4 +1,3 @@
-import os
 import importlib
 import inspect
 from pathlib import Path
@@ -7,23 +6,24 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html
 
-from src.core.utils.config_reader import ConfigReader
+from src.infrastructure.di import inject
+from src.infrastructure.utils.config_reader import ConfigReader
 
 
+@inject
 class WebService:
 
-    def __init__(self):
-        self.config = ConfigReader()
+    def __init__(self, config_reader: ConfigReader):
+        self.config = config_reader
         
         self.__app__ = FastAPI(
             title=self.config.get_app_name(),
             description=self.config.get_app_description(),
             version=self.config.get_app_version(),
-            docs_url=None,  # Disable default docs
-            redoc_url=None,  # Disable default redoc
+            docs_url=None,
+            redoc_url=None,
         )
 
-        # Add CORS middleware
         cors_config = self.config.get_cors_config()
         self.__app__.add_middleware(
             CORSMiddleware,
@@ -33,7 +33,6 @@ class WebService:
             allow_headers=cors_config.get('allow_headers', ["*"]),
         )
 
-        # Auto-discover and register controllers
         self._register_controllers()
 
         @self.__app__.get("/docs", include_in_schema=False)
@@ -49,25 +48,20 @@ class WebService:
         
     def _register_controllers(self):
         """
-        Automatically discover and register all controllers in the application layer.
-        Controllers should be in folders under src/application/ and have a *_controller.py file.
+        Discover and register all @inject controllers under src/application.
         """
-        # Get the current application directory
         current_dir = Path(__file__).parent
         registered_controllers = []
 
-        # Scan for controller directories
         for item in current_dir.iterdir():
             if item.is_dir() and not item.name.startswith('__'):
                 controller_file = item / f"{item.name}_controller.py"
                 
                 if controller_file.exists():
                     try:
-                        # Import the controller module
                         module_path = f"src.application.{item.name}.{item.name}_controller"
                         controller_module = importlib.import_module(module_path)
                         
-                        # Find the controller class (should end with 'Controller')
                         controller_class = None
                         for name, obj in inspect.getmembers(controller_module):
                             if (inspect.isclass(obj) and 
@@ -77,18 +71,12 @@ class WebService:
                                 break
                         
                         if controller_class:
-                            # Create controller instance
                             controller_instance = controller_class()
                             
-                            # Get the router from the controller
                             if hasattr(controller_instance, 'api'):
                                 router = controller_instance.api()
-                                
-                                # Create route prefix from controller name (lowercase)
                                 api_prefix = self.config.get_api_prefix()
                                 route_prefix = f"{api_prefix}/{item.name.lower()}"
-                                
-                                # Register the router
                                 self.__app__.include_router(router, prefix=route_prefix)
                                 registered_controllers.append(item.name)
                             else:
@@ -109,6 +97,4 @@ class WebService:
             self.__app__,
             host=self.config.get_server_host(),
             port=self.config.get_server_port(),
-            # log_level="info",
         )
-
