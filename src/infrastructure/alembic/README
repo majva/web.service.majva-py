@@ -1,0 +1,16 @@
+Generic single-database configuration.
+
+
+commands:
+
+for init 
+    python -m alembic init alembic
+
+Create & apply migrations:
+
+    python -m alembic revision --autogenerate -m "init_db"
+    python -m alembic upgrade head
+
+roll back to last migrations
+    python -m alembic downgrade -1
+    python -m alembic upgrade head
