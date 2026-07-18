@@ -1,6 +1,8 @@
+import os
 import yaml
-from pathlib import Path
 from typing import Dict, Any
+
+from dotenv import find_dotenv, load_dotenv
 
 from src.infrastructure.di import inject
 
@@ -8,12 +10,17 @@ from src.infrastructure.di import inject
 @inject
 class ConfigReader:
     """
-    Configuration reader for loading and managing application settings from config.yaml
+    Configuration reader for loading and managing application settings.
+
+    Reads env_type from .env (e.g. env_type=development).
+    Uses appsettings.development.yaml when env_type=development,
+    otherwise appsettings.yaml.
     """
     __di_singleton__ = True
     
     _instance = None
     _config = None
+    _dotenv_loaded = False
     
     def __new__(cls):
         if cls._instance is None:
@@ -23,20 +30,38 @@ class ConfigReader:
     def __init__(self):
         if self._config is None:
             self._load_config()
+
+    @classmethod
+    def _ensure_dotenv_loaded(cls) -> None:
+        if cls._dotenv_loaded:
+            return
+        dotenv_path = find_dotenv(usecwd=True)
+        if dotenv_path:
+            load_dotenv(dotenv_path)
+        cls._dotenv_loaded = True
+
+    @classmethod
+    def _resolve_config_path(cls) -> str:
+        cls._ensure_dotenv_loaded()
+        env_type = os.getenv("env_type", "development").strip().lower()
+        if env_type == "development":
+            return "./res/appsettings.development.yaml"
+        return "./res/appsettings.yaml"
     
     def _load_config(self):
-        """Load configuration from config.yaml file"""
+        """Load configuration from the environment-specific appsettings file"""
+        config_path = self._resolve_config_path()
         try:            
-            with open("./res/config.yaml", 'r', encoding='utf-8') as file:
+            with open(config_path, 'r', encoding='utf-8') as file:
                 self._config = yaml.safe_load(file)
                 
         except Exception as e:
-            print(f"Error loading configuration: {str(e)}")
+            print(f"Error loading configuration from {config_path}: {str(e)}")
             # Fallback to default configuration
             self._config = self._get_default_config()
     
     def _get_default_config(self) -> Dict[str, Any]:
-        """Return default configuration if config.yaml is not available"""
+        """Return default configuration if appsettings file is not available"""
         return {
             "app": {
                 "name": "Plugin Service API",
@@ -136,4 +161,4 @@ class ConfigReader:
     @property
     def config(self) -> Dict[str, Any]:
         """Get the entire configuration dictionary"""
-        return self._config.copy() 
+        return self._config.copy()

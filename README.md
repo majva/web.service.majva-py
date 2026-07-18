@@ -97,7 +97,8 @@ web.service.majva-py/
 │   │   ├── host_collection.py  # Host IoC
 │   │   ├── entrypoint.sh       # Docker: migrate + start
 │   │   └── res/
-│   │       └── config.yaml     # Application configuration
+│   │       ├── appsettings.yaml              # Default / non-dev config
+│   │       └── appsettings.development.yaml  # Development config
 │   ├── application/
 │   │   ├── web.py              # FastAPI app + controller discovery
 │   │   ├── application_collection.py
@@ -145,7 +146,7 @@ pip install -r requirements.txt
 
 ### 2. Configure the app
 
-Edit `src/host/res/config.yaml`:
+Edit `src/host/res/appsettings.development.yaml` (local) or `appsettings.yaml` (non-dev):
 
 ```yaml
 app:
@@ -196,7 +197,16 @@ python app.py
 
 ## Configuration
 
-All settings live in `src/host/res/config.yaml`. The app loads this file from `./res/config.yaml` relative to the working directory (`src/host` when running locally).
+Settings live in `src/host/res/`. The app picks a file from `env_type` in the project-root `.env` file (copy from `.env.example` if needed):
+
+```bash
+env_type=development
+```
+
+| `env_type` | File loaded |
+|------------|-------------|
+| `development` (default if unset) | `./res/appsettings.development.yaml` |
+| anything else | `./res/appsettings.yaml` |
 
 ### Vault vs local secrets
 
@@ -235,6 +245,7 @@ export VAULT_TOKEN="your-token"
 
 | Variable | When needed |
 |----------|-------------|
+| `env_type` | In `.env` — selects `appsettings.development.yaml` vs `appsettings.yaml` |
 | `VAULT_TOKEN` / `vaulthc.VAULT_TOKEN` | Vault enabled |
 | `POSTGRES_CONNECTION_STRING` | CI migrations & Docker entrypoint (overrides config when set) |
 | `ENVIRONMENT` | Docker entrypoint migration guard |
@@ -529,7 +540,7 @@ Demonstrates the complete stack: model → repository → service → controller
 
 | Problem | Solution |
 |---------|----------|
-| `Error loading configuration` | Run from `src/host` or ensure `./res/config.yaml` exists relative to CWD |
+| `Error loading configuration` | Run from `src/host` or ensure the matching `./res/appsettings*.yaml` exists relative to CWD |
 | Vault connection error on startup | Set `vaulthc.enabled: false` in config for local dev |
 | Controller not registered | Check folder name matches file: `profile/profile_controller.py` |
 | `No provider registered for X` | Add `@inject` to the implementation class |
