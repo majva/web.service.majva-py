@@ -9,13 +9,12 @@ from sys import path as sys_path, exit as sys_exit
 from urllib3.exceptions import InsecureRequestWarning
 import requests
 
-# Add the project root directory to Python path
 sys_path.append(os_path.dirname(os_path.dirname(os_path.dirname(os_path.abspath(__file__)))))
 
-from src.host.host_collection import WebHostCollection
+from src.application.web import WebService
+from src.infrastructure.di.inject import resolve
 from src.infrastructure.di.bootstrap import bootstrap_di
 
-# Suppress the warnings from urllib3
 requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
 
 
@@ -26,7 +25,7 @@ class App:
 
     def start_up(self):
         bootstrap_di()
-        WebHostCollection.main()
+        resolve(WebService).start()
 
 
 if __name__ == '__main__':

@@ -1,6 +1,6 @@
-from src.host.host_collection import WebHostCollection
+from src.infrastructure.di.reflection import bootstrap_packages
 
 
 def bootstrap_di() -> None:
-    """Bootstrap all reflected DI layers from host down to infrastructure."""
-    WebHostCollection.bootstrap()
+    """Discover and register all @inject classes under src/."""
+    bootstrap_packages()

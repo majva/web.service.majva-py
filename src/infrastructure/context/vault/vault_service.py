@@ -1,7 +1,7 @@
 from os import environ
 from typing import Any
 
-from src.infrastructure.di import inject
+from src.infrastructure.di.inject import inject
 from src.infrastructure.utils.config_reader import ConfigReader
 
 

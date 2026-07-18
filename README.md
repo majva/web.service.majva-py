@@ -1,8 +1,8 @@
 # Majva Python FastAPI Template
 
-A production-ready **FastAPI** web service template built with **Clean Architecture**, **reflection-based dependency injection**, **async PostgreSQL**, **Alembic migrations**, and a **GitLab CI/CD** pipeline.
+A lean **FastAPI** web service template with **constructor DI**, **async PostgreSQL**, **Alembic migrations**, and a **GitLab CI/CD** pipeline.
 
-Use this repository as a starting point for new backend services — not as a throwaway demo. The structure scales with your team and keeps business logic isolated from HTTP and infrastructure concerns.
+Use this repository as a starting point for new backend services — not as a throwaway demo.
 
 ---
 
@@ -10,9 +10,9 @@ Use this repository as a starting point for new backend services — not as a th
 
 | Principle | How it's applied |
 |-----------|------------------|
-| **Separation of concerns** | Four clear layers: Host → Application → Core → Infrastructure |
-| **Dependency inversion** | Core depends on interfaces; infrastructure provides implementations |
+| **Clear layers** | Host → Application → Core → Infrastructure |
 | **Convention over configuration** | `@inject` classes are auto-discovered — no manual DI registration |
+| **Pragmatic CRUD** | `BaseRepository` + thin repos; add interfaces only when you need them |
 | **Deployability** | Docker, migrations on startup, CI pipeline with validate → migrate → build |
 | **Developer experience** | Auto-registered controllers, Swagger UI, typed DTOs with Pydantic |
 
@@ -22,62 +22,56 @@ Use this repository as a starting point for new backend services — not as a th
 
 ```mermaid
 flowchart TB
-    subgraph Host["Host Layer"]
+    subgraph Host["Host"]
         App["app.py"]
-        HostCol["WebHostCollection"]
     end
 
-    subgraph Application["Application Layer"]
+    subgraph Application["Application"]
         Web["WebService"]
         Ctrl["Controllers"]
         DTO["DTOs"]
     end
 
-    subgraph Core["Core Layer"]
+    subgraph Core["Core"]
         Svc["Services"]
-        ISvc["Service Interfaces"]
     end
 
-    subgraph Infrastructure["Infrastructure Layer"]
+    subgraph Infrastructure["Infrastructure"]
         Repo["Repositories"]
+        Models["SQLAlchemy Models"]
         DB["PsqlDbContext"]
         Vault["VaultService"]
         Config["ConfigReader"]
+        DI["bootstrap_di"]
     end
 
-    subgraph Domain["Domain Layer"]
-        Models["SQLAlchemy Models"]
-        Agg["Aggregations / Value Objects"]
-    end
-
-    App --> HostCol --> Web
+    App --> DI
+    App --> Web
     Web --> Ctrl
     Ctrl --> Svc
-    Svc --> ISvc
     Svc --> Repo
     Repo --> Models
     Repo --> DB
+    DB --> Config
     DB --> Vault
-    Vault --> Config
 ```
 
 ### Layer responsibilities
 
 | Layer | Path | Responsibility |
 |-------|------|----------------|
-| **Host** | `src/host/` | Application entry point, config files, Docker entrypoint |
-| **Application** | `src/application/` | HTTP layer — controllers, DTOs, FastAPI wiring |
-| **Core** | `src/core/` | Business logic — services and their interfaces |
-| **Infrastructure** | `src/infrastructure/` | DB, Vault, repositories, migrations, logging |
-| **Domain** | `src/domain/` | Entities and domain models (no framework imports in aggregations) |
+| **Host** | `src/host/` | Entry point, appsettings, Docker entrypoint |
+| **Application** | `src/application/` | HTTP — controllers, DTOs, FastAPI wiring |
+| **Core** | `src/core/` | Business logic — services (optional Keycloak helpers) |
+| **Infrastructure** | `src/infrastructure/` | DB, models, Vault, repositories, DI, migrations |
 
 ### Request flow (example: create profile)
 
 ```
 HTTP POST /api/v1/profile
   → ProfileController
-    → ProfileService (core)
-      → ProfileRepository (infrastructure)
+    → ProfileService
+      → ProfileRepository
         → PsqlDbContext → PostgreSQL
 ```
 
@@ -88,41 +82,32 @@ HTTP POST /api/v1/profile
 ```
 web.service.majva-py/
 ├── ci/
-│   └── staging-ci.yml          # GitLab CI pipeline
+│   └── staging-ci.yml
 ├── docs/
 │   └── CHANGELOG.md
+├── .env.example
 ├── src/
 │   ├── host/
 │   │   ├── app.py              # Entry point
-│   │   ├── host_collection.py  # Host IoC
 │   │   ├── entrypoint.sh       # Docker: migrate + start
 │   │   └── res/
-│   │       ├── appsettings.yaml              # Default / non-dev config
-│   │       └── appsettings.development.yaml  # Development config
+│   │       ├── appsettings.yaml
+│   │       └── appsettings.development.yaml
 │   ├── application/
 │   │   ├── web.py              # FastAPI app + controller discovery
-│   │   ├── application_collection.py
-│   │   ├── health_check/       # Example: simple controller
-│   │   └── profile/            # Example: full CRUD feature
-│   │       ├── profile_controller.py
-│   │       └── dtos/
+│   │   ├── health_check/
+│   │   └── profile/
 │   ├── core/
-│   │   ├── core_collection.py
 │   │   └── services/
-│   │       └── profile/
-│   │           ├── iprofile_service.py
-│   │           └── profile_service.py
-│   ├── domain/
-│   │   ├── models/             # SQLAlchemy entities
-│   │   └── aggregations/       # Pydantic domain objects
+│   │       ├── profile/
+│   │       └── sso/            # Optional Keycloak Depends helpers
 │   └── infrastructure/
-│       ├── infrastructure_collection.py
-│       ├── di/                 # @inject + reflection engine
+│       ├── di/                 # @inject + bootstrap
+│       ├── models/             # SQLAlchemy entities
 │       ├── repositories/
-│       ├── context/            # DB, Vault, logging
-│       ├── alembic/            # Database migrations
+│       ├── context/            # DB, Vault
+│       ├── alembic/
 │       └── scripts/
-│           └── run_migrations.py
 ├── Dockerfile
 ├── requirements.txt
 └── .gitlab-ci.yml
@@ -254,38 +239,24 @@ export VAULT_TOKEN="your-token"
 
 ## Dependency injection
 
-This template uses a **reflection-based IoC** system. Mark a class with `@inject` and declare dependencies as typed constructor parameters — the container resolves them automatically.
+Mark a class with `@inject` and type-hint constructor parameters. `bootstrap_di()` scans `infrastructure` → `core` → `application` once and registers providers.
 
-### How it works
+```python
+from src.infrastructure.di.inject import inject, resolve
+from src.infrastructure.di.bootstrap import bootstrap_di
 
-Each layer has a collection that scans its own package tree:
-
-```mermaid
-flowchart LR
-    Host["WebHostCollection"] --> App["ApplicationCollection"]
-    App --> Core["CoreCollection"]
-    Core --> Infra["InfrastructureCollection"]
+bootstrap_di()
+service = resolve(ProfileService)
 ```
 
-| Collection | Auto-discovers |
-|--------------|----------------|
-| `InfrastructureCollection` | Everything under `src/infrastructure/` with `@inject` |
-| `CoreCollection` | Everything under `src/core/` with `@inject` |
-| `ApplicationCollection` | Everything under `src/application/` with `@inject` |
-| `WebHostCollection` | Boots the full chain and starts `WebService` |
-
-No manual registration. Add a file, add `@inject`, done.
-
 ### Singletons
-
-Use `__di_singleton__ = True` for shared instances (DB context, config, Vault):
 
 ```python
 @inject
 class PsqlDbContext:
     __di_singleton__ = True
 
-    def __init__(self, vault_service: VaultService, config_reader: ConfigReader):
+    def __init__(self, config_reader: ConfigReader, vault_service: VaultService):
         ...
 ```
 
@@ -297,95 +268,50 @@ class PsqlDbContext:
 | Repositories | **Yes** |
 | Infrastructure (DB, Vault, Config) | **Yes** |
 | Controllers with dependencies | **Yes** |
-| Controllers with no dependencies | **No** |
-| Domain models / DTOs | **No** |
-
-### Resolve manually (when needed)
-
-```python
-from src.core.core_collection import CoreCollection
-from src.core.services.profile.iprofile_service import IProfileService
-
-service = CoreCollection.resolve(IProfileService)
-```
+| Controllers with no dependencies | Optional |
+| Models / DTOs | **No** |
 
 ---
 
 ## Developing a new feature
 
-Follow the **Profile** example as a blueprint. To add a `Product` feature:
+Follow the **Profile** example. To add a `Product` feature:
 
-### Step 1 — Domain model
+### Step 1 — Model
 
-`src/domain/models/product/product.py`
+`src/infrastructure/models/product.py` — SQLAlchemy entity. Import it in `src/infrastructure/alembic/env.py` (same pattern as `profile`) so Alembic sees the metadata.
 
-```python
-from sqlalchemy import Column, String
-from src.infrastructure.context.sql_db.psql_dbcontext import Base
-
-class Product(Base):
-    __tablename__ = "product"
-
-    id = Column(String(36), primary_key=True)
-    name = Column(String(200), nullable=False)
-```
-
-Register it in `src/domain/models/__init__.py` for Alembic autogenerate.
-
-### Step 2 — Repository interface + implementation
-
-`src/infrastructure/repositories/product/iproduct_repository.py`
+### Step 2 — Repository
 
 ```python
-from abc import ABC, abstractmethod
-from src.infrastructure.repositories.base.ibase_repository import IBaseRepository
-
-class IProductRepository(IBaseRepository, ABC):
-    ...
-```
-
-`src/infrastructure/repositories/product/product_repository.py`
-
-```python
-from src.infrastructure.di import inject
-from src.infrastructure.context.sql_db.psql_dbcontext import PsqlDbContext
-
 @inject
-class ProductRepository(BaseRepository[Product], IProductRepository):
+class ProductRepository(BaseRepository[Product]):
 
     def __init__(self, db_context: PsqlDbContext):
         super().__init__(db_context=db_context, model=Product)
 ```
 
-### Step 3 — Core service
+Add a custom interface only when you have non-CRUD queries or a second implementation.
 
-`src/core/services/product/iproduct_service.py` — define the interface.
-
-`src/core/services/product/product_service.py`:
+### Step 3 — Service
 
 ```python
-from src.infrastructure.di import inject
-
 @inject
-class ProductService(IProductService):
+class ProductService:
 
-    def __init__(self, product_repository: IProductRepository):
+    def __init__(self, product_repository: ProductRepository):
         self._repository = product_repository
 ```
 
 ### Step 4 — DTOs + controller
 
-`src/application/product/dtos/product_dto.py` — Pydantic request/response models.
-
-`src/application/product/product_controller.py`:
+`src/application/product/dtos/product_dto.py` and `product_controller.py`:
 
 ```python
-from src.infrastructure.di import inject
-
 @inject
 class ProductController:
 
-    def __init__(self, product_service: IProductService):
+    def __init__(self, product_service: ProductService):
         self._service = product_service
 
     def api(self):
@@ -394,21 +320,19 @@ class ProductController:
         return router
 ```
 
-Controllers are **auto-registered** by `WebService` when they follow the convention:
+Controllers are auto-registered when they follow:
 
 ```
 src/application/{feature}/{feature}_controller.py
 ```
 
-Routes are mounted at `/api/v1/{feature}`.
+Routes mount at `/api/v1/{feature}`.
 
-### Step 5 — Database migration
+### Step 5 — Migration
 
 ```bash
 python src/infrastructure/scripts/run_migrations.py --sync -m "add product table"
 ```
-
-Commit the generated file under `src/infrastructure/alembic/versions/`.
 
 ---
 
@@ -511,12 +435,12 @@ Demonstrates the complete stack: model → repository → service → controller
 
 ## Best practices
 
-1. **Core never imports infrastructure** — only interfaces (`IProfileRepository`, not `ProfileRepository`).
-2. **Controllers stay thin** — validate input, call service, return DTO. No business logic.
+1. **Controllers stay thin** — validate input, call service, return DTO.
+2. **Skip pass-through interfaces** — inject concrete repos/services until you need a second implementation.
 3. **One migration per logical change** — always commit Alembic files to git.
-4. **Use `@inject` on services and repos** — skip it on controllers that have no dependencies.
-5. **Keep Vault disabled locally** — use `database.url` in config for fast iteration.
-6. **Follow naming conventions** — `*_service.py`, `*_repository.py`, `*_controller.py` so reflection picks them up.
+4. **Use `@inject` on services and repos** — optional on controllers with no dependencies.
+5. **Keep Vault disabled locally** — use `database.url` in appsettings for fast iteration.
+6. **Follow naming conventions** — `*_service.py`, `*_repository.py`, `*_controller.py` so discovery picks them up.
 
 ---
 

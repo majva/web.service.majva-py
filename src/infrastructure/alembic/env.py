@@ -14,7 +14,7 @@ if config.config_file_name is not None:
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
 
 from src.infrastructure.context.sql_db.psql_dbcontext import Base
-import src.domain.models  # noqa: F401 — register models with Base.metadata
+import src.infrastructure.models.profile  # noqa: F401 — register models with Base.metadata
 
 target_metadata = Base.metadata
 

@@ -3,12 +3,11 @@ from typing import Any, Generic, List, Optional, Type, TypeVar
 from sqlalchemy import select
 
 from src.infrastructure.context.sql_db.psql_dbcontext import PsqlDbContext
-from src.infrastructure.repositories.base.ibase_repository import IBaseRepository
 
 T = TypeVar("T")
 
 
-class BaseRepository(IBaseRepository, Generic[T]):
+class BaseRepository(Generic[T]):
 
     def __init__(self, db_context: PsqlDbContext, model: Type[T]):
         self._db_context = db_context

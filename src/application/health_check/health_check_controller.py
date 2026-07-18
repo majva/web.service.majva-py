@@ -2,7 +2,7 @@ from fastapi import APIRouter, status
 from datetime import datetime
 from typing import Dict
 
-from src.infrastructure.di import inject
+from src.infrastructure.di.inject import inject
 
 from .dtos.health_check_dto import HealthCheckResponse 
 

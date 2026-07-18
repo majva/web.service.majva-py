@@ -41,11 +41,17 @@ def _resolve_database_url() -> str:
         from src.infrastructure.context.vault.vault_service import VaultService
 
         vault_service = VaultService(config_reader=config_reader)
-        return _normalize_database_url(vault_service.get_secret(key="POSTGRES_CONNECTION_STRING"))
+        return _normalize_database_url(
+            vault_service.get_secret(key="POSTGRES_CONNECTION_STRING")
+        )
+
+    url = config_reader.get("database.url")
+    if url:
+        return _normalize_database_url(str(url))
 
     raise RuntimeError(
-        "POSTGRES_CONNECTION_STRING is not set. "
-        "Provide it as an environment variable, or enable Vault (vaulthc.enabled=true)."
+        "Database URL is not set. Provide POSTGRES_CONNECTION_STRING, "
+        "database.url in appsettings, or enable Vault (vaulthc.enabled=true)."
     )
 
 

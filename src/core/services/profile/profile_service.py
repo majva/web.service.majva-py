@@ -1,15 +1,14 @@
 from typing import List, Optional
 
-from src.core.services.profile.iprofile_service import IProfileService
-from src.domain.models.profile.profile import Profile
-from src.infrastructure.di import inject
-from src.infrastructure.repositories.profile.iprofile_repository import IProfileRepository
+from src.infrastructure.di.inject import inject
+from src.infrastructure.models.profile import Profile
+from src.infrastructure.repositories.profile.profile_repository import ProfileRepository
 
 
 @inject
-class ProfileService(IProfileService):
+class ProfileService:
 
-    def __init__(self, profile_repository: IProfileRepository):
+    def __init__(self, profile_repository: ProfileRepository):
         self._profile_repository = profile_repository
 
     async def create_async(self, first_name: str, last_name: str) -> Profile:

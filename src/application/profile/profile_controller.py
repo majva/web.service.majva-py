@@ -7,14 +7,14 @@ from src.application.profile.dtos.profile_dto import (
     ProfileResponseDto,
     UpdateProfileDto,
 )
-from src.core.services.profile.iprofile_service import IProfileService
-from src.infrastructure.di import inject
+from src.core.services.profile.profile_service import ProfileService
+from src.infrastructure.di.inject import inject
 
 
 @inject
 class ProfileController:
 
-    def __init__(self, profile_service: IProfileService):
+    def __init__(self, profile_service: ProfileService):
         self._profile_service = profile_service
 
     def api(self):
